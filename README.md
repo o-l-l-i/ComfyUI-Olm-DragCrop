@@ -90,7 +90,6 @@ There are no extra dependencies - it works out of the box.
 - **You need to run the graph once to get an image preview from upstream.**
   - This is a technical limitation I could not get around.
   - I had realtime update for Load Image node as a special case, but I dropped it to avoid ambiguity/confusion.
-- No built-in aspect ratio locking yet!
 - Only supports a single crop region per node.
 
 ---
