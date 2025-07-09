@@ -113,10 +113,16 @@ app.registerExtension({
       }
     };
 
+    nodeType.prototype.getWidgetValSafe = function (name) {
+      const widget = this.getWidget(name);
+      return widget ? widget.value : null;
+    };
+
     const DEFAULT_SIZE = 512;
     const HANDLE_SIZE = 4;
     const MIN_CROP_DIMENSION = 1;
     const ASPECT_STRING_MESSAGE = "Use values like 0.5 or 16:9";
+    const DEFAULT_SNAP_VALUE = "none";
 
     const onNodeCreated = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function () {
@@ -137,6 +143,8 @@ app.registerExtension({
       this.properties.crop_bottom = 0;
       this.properties.crop_width = DEFAULT_SIZE;
       this.properties.crop_height = DEFAULT_SIZE;
+
+      this.properties.snapValue = DEFAULT_SNAP_VALUE;
 
       this.properties.aspectRatioString = ASPECT_STRING_MESSAGE;
       this.properties.aspectLockEnabled = false;
@@ -160,6 +168,8 @@ app.registerExtension({
       this.cropData_bottom = 0;
       this.cropData_width = DEFAULT_SIZE;
       this.cropData_height = DEFAULT_SIZE;
+
+      this.snapValue = DEFAULT_SNAP_VALUE;
 
       this.aspectRatioString = ASPECT_STRING_MESSAGE;
       this.aspectLockEnabled = false;
@@ -205,6 +215,19 @@ app.registerExtension({
           return [0, -4];
         };
       }
+
+      this.addWidget(
+        "combo",
+        "Snap to",
+        "none",
+        (value) => {
+          this.snapValue = value;
+          this.commitState();
+        },
+        {
+          values: ["none", "2", "4", "8", "16", "32", "64"],
+        }
+      );
 
       const aspectRatioWidget = this.addWidget(
         "string",
@@ -400,6 +423,8 @@ app.registerExtension({
       this.cropData_width = this.properties.crop_width ?? DEFAULT_SIZE;
       this.cropData_height = this.properties.crop_height ?? DEFAULT_SIZE;
 
+      this.snapValue = this.properties.snapValue ?? DEFAULT_SNAP_VALUE;
+
       this.aspectRatioString =
         this.properties.aspectRatioString ?? ASPECT_STRING_MESSAGE;
       this.aspectLockEnabled = this.properties.aspectLockEnabled ?? false;
@@ -441,6 +466,8 @@ app.registerExtension({
       safeAssign(this.properties, "crop_bottom", this.cropData_bottom);
       safeAssign(this.properties, "crop_width", this.cropData_width);
       safeAssign(this.properties, "crop_height", this.cropData_height);
+      safeAssign(this.properties, "snapValue", this.snapValue);
+
       this.setWidgetValue("crop_left", this.cropData_left);
       this.setWidgetValue("crop_right", this.cropData_right);
       this.setWidgetValue("crop_top", this.cropData_top);
@@ -504,7 +531,12 @@ app.registerExtension({
           this.actualImageHeight = newHeight;
         }
 
+        if (this.snapValue !== null && this.snapValue !== "none") {
+          this._applySnapToDragBox(parseInt(this.snapValue));
+        }
+        this.updateCropValuesFromBox();
         this.commitState();
+        this.setDirtyCanvas(true);
       };
 
       this.image.onerror = () => {
@@ -1225,6 +1257,10 @@ app.registerExtension({
         this.normalizeCropBox();
       }
 
+      if (this.snapValue !== null && this.snapValue !== "none") {
+        this._applySnapToDragBox(parseInt(this.snapValue));
+      }
+
       this.updateCropValuesFromBox();
 
       this.cachedWidth = null;
@@ -1255,6 +1291,41 @@ app.registerExtension({
         this._restoreExactBoxDimensionsIfMoved();
         this._finalizeCrop();
       }
+    };
+
+    nodeType.prototype._applySnapToDragBox = function (snapValue) {
+      const preview = this.getPreviewArea();
+      const scaleX = this.actualImageWidth / preview.width;
+      const scaleY = this.actualImageHeight / preview.height;
+
+      let startX = Math.min(this.dragStart[0], this.dragEnd[0]) * scaleX;
+      let startY = Math.min(this.dragStart[1], this.dragEnd[1]) * scaleY;
+      let width = Math.abs(this.dragEnd[0] - this.dragStart[0]) * scaleX;
+      let height = Math.abs(this.dragEnd[1] - this.dragStart[1]) * scaleY;
+
+      let snappedWidth = Math.round(width / snapValue) * snapValue;
+      let snappedHeight = Math.round(height / snapValue) * snapValue;
+
+      if (startX + snappedWidth > this.actualImageWidth) {
+        snappedWidth =
+          Math.floor((this.actualImageWidth - startX - 1) / snapValue) *
+          snapValue;
+      }
+
+      if (startY + snappedHeight > this.actualImageHeight) {
+        snappedHeight =
+          Math.floor((this.actualImageHeight - startY - 1) / snapValue) *
+          snapValue;
+      }
+
+      snappedWidth = Math.max(snapValue, snappedWidth);
+      snappedHeight = Math.max(snapValue, snappedHeight);
+
+      let endX = startX + snappedWidth;
+      let endY = startY + snappedHeight;
+
+      this.dragStart = [startX / scaleX, startY / scaleY];
+      this.dragEnd = [endX / scaleX, endY / scaleY];
     };
 
     nodeType.prototype.getPreviewArea = function () {
@@ -1750,6 +1821,7 @@ app.registerExtension({
       ctx.font = "12px Arial";
       ctx.textAlign = "center";
 
+      this.updateCropDisplayValues({ round: true });
       if (this.infoDisplayEnabled && this.cropDisplayValues) {
         ctx.fillText(
           `${this.cropDisplayValues.percentWidth} × ${this.cropDisplayValues.percentHeight} %`,
@@ -1876,7 +1948,7 @@ app.registerExtension({
           this.actualImageHeight
         } AR: ${decimalAspectRatio.toFixed(2)}:1 (${aspectRatio})`,
         20,
-        336
+        362
       );
 
       ctx.fillStyle = "#777";
@@ -1896,7 +1968,7 @@ app.registerExtension({
         ctx.fillText(
           `Crop: L: ${this.cropDisplayValues.left} R: ${this.cropDisplayValues.right} T: ${this.cropDisplayValues.top} B: ${this.cropDisplayValues.bottom}`,
           20,
-          324
+          349
         );
 
         ctx.fillText(
@@ -1906,7 +1978,7 @@ app.registerExtension({
             2
           )}:1 (${aspectRatioCropped})`,
           20,
-          348
+          373
         );
       }
 

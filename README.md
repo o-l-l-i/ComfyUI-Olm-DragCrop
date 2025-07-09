@@ -34,6 +34,7 @@ Use it for:
 * **Flexible Cropping:** Define crop regions by drawing a new box, or by resizing/moving an existing one.
 * **Mask Support:** Basic mask data to pass through.
 * **Aspect Ratio Locking:** Define aspect ratio with numerical value (0.5, 1, 2.0) or aspect ratio (4:3, 16:9).
+* **Pixel snap** Align crop edges to a grid by selecting a snap value (2–32) from the "Snap to" dropdown - select "none" to disable snapping.
 * **Image Handling:**
     * Loads and displays images from upstream nodes.
     * Automatically adjusts internal dimensions to match the loaded image.
@@ -90,6 +91,7 @@ There are no extra dependencies - it works out of the box.
 - **You need to run the graph once to get an image preview from upstream.**
   - This is a technical limitation I could not get around.
   - I had realtime update for Load Image node as a special case, but I dropped it to avoid ambiguity/confusion.
+- No built-in aspect ratio locking yet!
 - Only supports a single crop region per node.
 
 ---
