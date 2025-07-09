@@ -7,7 +7,7 @@ An interactive image cropping node for ComfyUI, allowing precise visual selectio
 - **Author:** Olli Sorjonen
 - **GitHub:** https://github.com/o-l-l-i
 - **X:** https://x.com/Olmirad
-- **Version:** 1.0.0 (Initial version)
+- **Version:** 1.0.1 (Added snap feature)
 
 ---
 
@@ -34,7 +34,7 @@ Use it for:
 * **Flexible Cropping:** Define crop regions by drawing a new box, or by resizing/moving an existing one.
 * **Mask Support:** Basic mask data to pass through.
 * **Aspect Ratio Locking:** Define aspect ratio with numerical value (0.5, 1, 2.0) or aspect ratio (4:3, 16:9).
-* **Pixel snap** Align crop edges to a grid by selecting a snap value (2–32) from the "Snap to" dropdown - select "none" to disable snapping.
+* **Pixel snap** Align crop edges to a grid by selecting a snap value (2-64) from the "Snap to" dropdown - select "none" to disable snapping.
 * **Image Handling:**
     * Loads and displays images from upstream nodes.
     * Automatically adjusts internal dimensions to match the loaded image.
