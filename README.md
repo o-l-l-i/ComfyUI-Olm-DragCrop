@@ -34,7 +34,7 @@ Use it for:
 * **Flexible Cropping:** Define crop regions by drawing a new box, or by resizing/moving an existing one.
 * **Mask Support:** Basic mask data to pass through.
 * **Aspect Ratio Locking:** Define aspect ratio with numerical value (0.5, 1, 2.0) or aspect ratio (4:3, 16:9).
-* **Pixel snap** Align crop edges to a grid by selecting a snap value (2-64) from the "Snap to" dropdown - select "none" to disable snapping.
+* **Pixel snap:** Align crop edges to a grid by selecting a snap value (2-64) from the "Snap to" dropdown - select "none" to disable snapping.
 * **Image Handling:**
     * Loads and displays images from upstream nodes.
     * Automatically adjusts internal dimensions to match the loaded image.
