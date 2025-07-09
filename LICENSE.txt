@@ -1,0 +1,32 @@
+License & Terms of Use (version 1.0, 2025/6/28)
+
+
+Copyright (c) 2025 Olli Sorjonen
+
+This project is source-available, but not open-source under a standard open-source license, and not freeware.
+
+You may use and experiment with it freely, and any results you create with it are yours to use however you like.
+
+
+However:
+
+Redistribution, resale, rebranding, or claiming authorship of this code or extension is strictly prohibited without explicit written permission.
+
+Use at your own risk. No warranties or guarantees are provided.
+
+The only official repository for this project is: https://github.com/o-l-l-i/ComfyUI-Olm-DragCrop
+
+
+Why These Restrictions?
+
+I'm an independent creator building tools like this to support my own projects and want to share what I make with the community.
+That said, I have limited time and resources - and I also need to promote and represent my own work.
+
+If your specific use case seems unclear or falls into a gray area, please feel free to reach out and ask.
+
+
+DISCLAIMER
+
+THIS PIECE OF SOFTWARE IS PROVIDED "AS IS," WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED. BY USING THIS SOFTWARE, YOU AGREE THAT YOU ARE SOLELY
+RESPONSIBLE FOR ANY OUTCOMES OR ISSUES THAT MAY ARISE. USE AT YOUR OWN RISK.
