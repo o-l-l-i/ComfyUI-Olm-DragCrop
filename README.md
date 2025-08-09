@@ -7,7 +7,7 @@ An interactive image cropping node for ComfyUI, allowing precise visual selectio
 - **Author:** Olli Sorjonen
 - **GitHub:** https://github.com/o-l-l-i
 - **X:** https://x.com/Olmirad
-- **Version:** 1.0.1 (Added snap feature)
+- **Version:** 1.0.1.1 (Chain original mouse event handlers to maintain subgraph header button functionality in ComfyUI frontend 1.24.4 and later.)
 
 ---
 
@@ -57,18 +57,19 @@ Clone this repository into your `custom_nodes` folder.
 git clone https://github.com/o-l-l-i/ComfyUI-Olm-DragCrop.git
 ```
 
-```bash
 Your folder should look like:
 
+```bash
 ComfyUI/
 └── custom_nodes/
     └── ComfyUI-Olm-DragCrop/
         ├── __init__.py
-        ├── olm_dragcrop.js
+        ├── olm_dragcrop.py
         └── ... (other files)
 ```
 
 Restart ComfyUI to load the new node.
+
 There are no extra dependencies - it works out of the box.
 
 ---
@@ -91,7 +92,6 @@ There are no extra dependencies - it works out of the box.
 - **You need to run the graph once to get an image preview from upstream.**
   - This is a technical limitation I could not get around.
   - I had realtime update for Load Image node as a special case, but I dropped it to avoid ambiguity/confusion.
-- No built-in aspect ratio locking yet!
 - Only supports a single crop region per node.
 
 ---
@@ -103,6 +103,17 @@ This extension is experimental and under active development. Functionality, file
 Back up your projects frequently. Feedback, bug reports, and suggestions are always welcome - but expect breakage, quirks, and rough edges. This tool does what I need right now; future updates may be irregular depending on available time.
 
 ---
+
+## Version History
+
+- **1.0.1.1**
+  - Chain original mouse event handlers to maintain subgraph header button functionality in ComfyUI frontend 1.24.4 and later.
+  - Fix mask pass-through issue (None type crash.)
+- **1.0.1** Added snap feature
+- **1.0.0** Initial release
+
+---
+
 
 ## License & Usage Terms
 

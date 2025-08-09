@@ -441,6 +441,39 @@ app.registerExtension({
       this.commitState();
     };
 
+    nodeType.prototype.onAdded = function () {
+      const node = this;
+
+      const originalOnMouseDown = node.onMouseDown;
+      const originalOnMouseMove = node.onMouseMove;
+      const originalOnMouseUp = node.onMouseUp;
+      const originalOnMouseLeave = node.onMouseLeave;
+
+      node.onMouseDown = function (e, pos, canvas) {
+        const wasHandled = originalOnMouseDown?.call(this, e, pos, canvas);
+        if (wasHandled) return true;
+        return this.handleOnMouseDown?.(e, pos, canvas);
+      };
+
+      node.onMouseMove = function (e, pos, canvas) {
+        const wasHandled = originalOnMouseMove?.call(this, e, pos, canvas);
+        if (wasHandled) return true;
+        return this.handleOnMouseMove?.(e, pos, canvas);
+      };
+
+      node.onMouseUp = function (e, pos, canvas) {
+        const wasHandled = originalOnMouseUp?.call(this, e, pos, canvas);
+        if (wasHandled) return true;
+        return this.handleOnMouseUp?.(e, pos, canvas);
+      };
+
+      node.onMouseLeave = function (e, pos, canvas) {
+        const wasHandled = originalOnMouseLeave?.call(this, e, pos, canvas);
+        if (wasHandled) return true;
+        return this.handleOnMouseLeave?.(e, pos, canvas);
+      };
+    };
+
     nodeType.prototype.commitState = function () {
       function safeAssign(target, key, value) {
         if (value !== null && value !== undefined) {
@@ -644,7 +677,7 @@ app.registerExtension({
       this.setDirtyCanvas(true);
     };
 
-    nodeType.prototype.onMouseDown = function (e, pos, graphCanvas) {
+    nodeType.prototype.handleOnMouseDown = function (e, pos, graphCanvas) {
       const mousePos = [e.canvasX, e.canvasY];
       let local = this.getPreviewLocalPos(mousePos);
 
@@ -1161,11 +1194,11 @@ app.registerExtension({
       }
     };
 
-    nodeType.prototype.onMouseMove = function (e, pos, graphCanvas) {
+    nodeType.prototype.handleOnMouseMove = function (e, pos, graphCanvas) {
       if (!this.dragging || !this.dragStart || !this.dragEnd) return false;
 
       if (e.buttons !== 1) {
-        this.onMouseUp(e, pos);
+        this.handleOnMouseUp(e, pos);
         return false;
       }
 
@@ -1273,7 +1306,7 @@ app.registerExtension({
       this.commitState();
     };
 
-    nodeType.prototype.onMouseUp = function (e, pos, graphCanvas) {
+    nodeType.prototype.handleOnMouseUp = function (e, pos, graphCanvas) {
       if (!this.dragging) return false;
 
       this.dragging = false;
@@ -1284,7 +1317,7 @@ app.registerExtension({
       return true;
     };
 
-    nodeType.prototype.onMouseLeave = function (e) {
+    nodeType.prototype.handleOnMouseLeave = function (e) {
       if (this.dragging) {
         this.dragging = false;
 
@@ -1347,7 +1380,6 @@ app.registerExtension({
       const headerHeight = 80;
       const maxPreviewWidth = this.size[0] - padding * 2;
       const maxPreviewHeight = this.size[1] - headerHeight - 50;
-
       const aspectRatio = this.actualImageWidth / this.actualImageHeight;
       let previewWidth, previewHeight;
 
@@ -1412,7 +1444,6 @@ app.registerExtension({
       this.normalizeCropBox();
       const [x0, y0] = this.dragStart;
       const [x1, y1] = this.dragEnd;
-
       const boxWidth = x1 - x0;
       const boxHeight = y1 - y0;
 
@@ -1445,7 +1476,6 @@ app.registerExtension({
       this.cropData_bottom = 0;
       this.cropData_width = width;
       this.cropData_height = height;
-
       this.dragStart = [0, 0];
       const previewArea = this.getPreviewArea();
       this.dragEnd = [previewArea.width, previewArea.height];

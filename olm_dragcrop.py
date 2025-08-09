@@ -6,9 +6,11 @@ from folder_paths import get_temp_directory
 
 DEBUG_MODE = False
 
+
 def debug_print(*args, **kwargs):
     if DEBUG_MODE:
         print(*args, **kwargs)
+
 
 class OlmDragCrop:
     @classmethod
@@ -26,12 +28,10 @@ class OlmDragCrop:
                 "last_width": ("INT", {"default": 0}),
                 "last_height": ("INT", {"default": 0}),
             },
-            "optional": {
-                "mask": ("MASK",)
-            },
+            "optional": {"mask": ("MASK",)},
             "hidden": {
                 "node_id": "UNIQUE_ID",
-            }
+            },
         }
 
     RETURN_TYPES = ("IMAGE", "MASK")
@@ -63,7 +63,9 @@ class OlmDragCrop:
         debug_print(f"- Last image size:    {last_width}x{last_height}")
         debug_print(f"- Batch size: {batch_size}, Channels: {channels}")
 
-        resolution_changed = (current_width != last_width or current_height != last_height)
+        resolution_changed = (
+            current_width != last_width or current_height != last_height
+        )
         reset_frontend_crop = False
 
         if resolution_changed:
@@ -90,26 +92,44 @@ class OlmDragCrop:
         computed_crop_right = crop_left + crop_width
         computed_crop_bottom = crop_top + crop_height
 
-        if (crop_left < 0 or crop_top < 0 or
-            computed_crop_right > current_width or computed_crop_bottom > current_height or
-            crop_width <= 0 or crop_height <= 0):
+        if (
+            crop_left < 0
+            or crop_top < 0
+            or computed_crop_right > current_width
+            or computed_crop_bottom > current_height
+            or crop_width <= 0
+            or crop_height <= 0
+        ):
             print("\n[Error] Invalid crop area → Resetting to full image.")
             crop_left = 0
             crop_top = 0
             crop_right = 0
-            crop_left = 0
+            crop_bottom = 0
             crop_width = current_width
             crop_height = current_height
             computed_crop_right = crop_left + crop_width
             computed_crop_bottom = crop_top + crop_height
             reset_frontend_crop = True
 
-        cropped_image = image[:, crop_top:computed_crop_bottom, crop_left:computed_crop_right, :]
-
+        cropped_image = image[
+            :, crop_top:computed_crop_bottom, crop_left:computed_crop_right, :
+        ]
 
         cropped_mask = None
+
         if mask is not None:
-            cropped_mask = mask[:, crop_top:computed_crop_bottom, crop_left:computed_crop_right]
+            cropped_mask = mask[
+                :, crop_top:computed_crop_bottom, crop_left:computed_crop_right
+            ]
+        else:
+            cropped_mask = torch.zeros(
+                (batch_size, crop_height, crop_width),
+                dtype=image.dtype,  # or torch.float32 if you prefer
+                device=image.device,
+            )
+
+        debug_print(f"- Computed crop_right:  {computed_crop_right}")
+        debug_print(f"- Computed crop_bottom: {computed_crop_bottom}")
 
         output_width = crop_width
         output_height = crop_height
@@ -143,17 +163,17 @@ class OlmDragCrop:
             "height": crop_height,
             "original_size": [current_width, current_height],
             "cropped_size": [crop_width, crop_height],
-            "reset_crop_ui": reset_frontend_crop
+            "reset_crop_ui": reset_frontend_crop,
         }
 
         return {
             "ui": {
-                "images_custom": [{
-                    "filename": original_filename,
-                    "subfolder": "",
-                    "type": "temp"
-                }] if original_filename else [],
-                "crop_info": [crop_info_for_frontend]
+                "images_custom": (
+                    [{"filename": original_filename, "subfolder": "", "type": "temp"}]
+                    if original_filename
+                    else []
+                ),
+                "crop_info": [crop_info_for_frontend],
             },
             "result": (cropped_image, cropped_mask),
         }
