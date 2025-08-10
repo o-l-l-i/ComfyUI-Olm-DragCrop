@@ -27,6 +27,10 @@ class OlmDragCrop:
                 "crop_height": ("INT", {"default": 512, "min": 1, "max": 8192}),
                 "last_width": ("INT", {"default": 0}),
                 "last_height": ("INT", {"default": 0}),
+                "fixed_size_enabled": ("BOOLEAN", {"default": False}),
+                "fixed_size_preset": (["Custom", "720x1280", "1280x720", "1024x1024", "512x512", "768x768", "1024x768", "768x1024", "1920x1080", "1080x1920", "1280x960", "960x1280", "640x480", "480x640"], {"default": "Custom"}),
+                "fixed_width": ("INT", {"default": 512, "min": 1, "max": 8192}),
+                "fixed_height": ("INT", {"default": 512, "min": 1, "max": 8192}),
             },
             "optional": {"mask": ("MASK",)},
             "hidden": {
@@ -50,6 +54,10 @@ class OlmDragCrop:
         crop_height: int,
         last_width: int,
         last_height: int,
+        fixed_size_enabled: bool,
+        fixed_size_preset: str,
+        fixed_width: int,
+        fixed_height: int,
         node_id=None,
         mask=None,
     ):
@@ -78,6 +86,63 @@ class OlmDragCrop:
             crop_width = current_width
             crop_height = current_height
             reset_frontend_crop = True
+
+        # Handle fixed size mode
+        if fixed_size_enabled:
+            debug_print("\n[Fixed Size Mode Enabled]")
+            # Parse preset sizes
+            if fixed_size_preset != "Custom":
+                parts = fixed_size_preset.split("x")
+                if len(parts) == 2:
+                    preset_width = int(parts[0])
+                    preset_height = int(parts[1])
+                    fixed_width = preset_width
+                    fixed_height = preset_height
+                    debug_print(f"→ Using preset: {fixed_width}x{fixed_height}")
+            
+            debug_print(f"→ Target fixed size: {fixed_width}x{fixed_height}")
+            
+            # Only center the crop if it's a resolution change or initial crop
+            # Otherwise, preserve the user's position
+            should_center = resolution_changed or (crop_left == 0 and crop_top == 0 and crop_width == current_width and crop_height == current_height)
+            
+            if should_center:
+                # Center the fixed size crop in the image for initial placement
+                center_x = current_width // 2
+                center_y = current_height // 2
+                
+                # Calculate crop boundaries ensuring we don't exceed image bounds
+                half_fixed_width = min(fixed_width // 2, current_width // 2)
+                half_fixed_height = min(fixed_height // 2, current_height // 2)
+                
+                crop_left = max(0, center_x - half_fixed_width)
+                crop_top = max(0, center_y - half_fixed_height)
+                debug_print("→ Centering crop (initial placement or resolution change)")
+                reset_frontend_crop = True
+            else:
+                # Keep the existing position, just enforce the fixed size
+                debug_print(f"→ Preserving position: {crop_left},{crop_top}")
+            
+            # Ensure the crop doesn't exceed image boundaries
+            if crop_left + fixed_width > current_width:
+                crop_left = max(0, current_width - fixed_width)
+            if crop_top + fixed_height > current_height:
+                crop_top = max(0, current_height - fixed_height)
+            
+            # Ensure we don't have negative coordinates
+            crop_left = max(0, crop_left)
+            crop_top = max(0, crop_top)
+            
+            # Calculate the actual crop dimensions (may be smaller if image is smaller than target)
+            actual_crop_width = min(fixed_width, current_width - crop_left)
+            actual_crop_height = min(fixed_height, current_height - crop_top)
+            
+            crop_width = actual_crop_width
+            crop_height = actual_crop_height
+            crop_right = current_width - crop_left - crop_width
+            crop_bottom = current_height - crop_top - crop_height
+            
+            debug_print(f"→ Applied fixed size crop: {crop_left},{crop_top} size {crop_width}x{crop_height}")
 
         debug_print("\n[Crop Inputs]")
         debug_print(f"- crop_left:            {crop_left}")
@@ -164,6 +229,10 @@ class OlmDragCrop:
             "original_size": [current_width, current_height],
             "cropped_size": [crop_width, crop_height],
             "reset_crop_ui": reset_frontend_crop,
+            "fixed_size_enabled": fixed_size_enabled,
+            "fixed_size_preset": fixed_size_preset,
+            "fixed_width": fixed_width,
+            "fixed_height": fixed_height,
         }
 
         return {
