@@ -109,7 +109,12 @@ app.registerExtension({
     nodeType.prototype.setWidgetValue = function (widgetName, val) {
       const widget = this.getWidget(widgetName);
       if (widget && val !== null && val !== undefined) {
-        widget.value = Math.round(val);
+        // Only use Math.round for numeric values
+        if (typeof val === 'number') {
+          widget.value = Math.round(val);
+        } else {
+          widget.value = val;
+        }
       }
     };
 
@@ -151,6 +156,11 @@ app.registerExtension({
 
       this.properties.infoDisplayEnabled = true;
 
+      this.properties.fixedSizeEnabled = false;
+      this.properties.fixedSizePreset = "Custom";
+      this.properties.fixedWidth = DEFAULT_SIZE;
+      this.properties.fixedHeight = DEFAULT_SIZE;
+
       this.image = new Image();
       this.image.src = "";
       this.imageLoaded = false;
@@ -175,6 +185,11 @@ app.registerExtension({
       this.aspectLockEnabled = false;
 
       this.infoDisplayEnabled = true;
+
+      this.fixedSizeEnabled = false;
+      this.fixedSizePreset = "Custom";
+      this.fixedWidth = DEFAULT_SIZE;
+      this.fixedHeight = DEFAULT_SIZE;
 
       const drawing_version_widget = this.getWidget("drawing_version");
       if (drawing_version_widget) {
@@ -216,6 +231,43 @@ app.registerExtension({
         };
       }
 
+      // Hide fixed size widgets as we'll create custom UI elements
+      const fixed_size_enabled_widget = this.getWidget("fixed_size_enabled");
+      if (fixed_size_enabled_widget) {
+        fixed_size_enabled_widget.hidden = true;
+        fixed_size_enabled_widget.computeSize = function () {
+          return [0, -4];
+        };
+      }
+
+      const fixed_size_preset_widget = this.getWidget("fixed_size_preset");
+      if (fixed_size_preset_widget) {
+        fixed_size_preset_widget.hidden = true;
+        fixed_size_preset_widget.computeSize = function () {
+          return [0, -4];
+        };
+        // Ensure it has a valid default value
+        if (!fixed_size_preset_widget.value || fixed_size_preset_widget.value === "None") {
+          fixed_size_preset_widget.value = "Custom";
+        }
+      }
+
+      const fixed_width_widget = this.getWidget("fixed_width");
+      if (fixed_width_widget) {
+        fixed_width_widget.hidden = true;
+        fixed_width_widget.computeSize = function () {
+          return [0, -4];
+        };
+      }
+
+      const fixed_height_widget = this.getWidget("fixed_height");
+      if (fixed_height_widget) {
+        fixed_height_widget.hidden = true;
+        fixed_height_widget.computeSize = function () {
+          return [0, -4];
+        };
+      }
+
       this.addWidget(
         "combo",
         "Snap to",
@@ -228,6 +280,80 @@ app.registerExtension({
           values: ["none", "2", "4", "8", "16", "32", "64"],
         }
       );
+
+      // Fixed size widgets
+      this.fixedSizeToggleWidget = this.addWidget(
+        "toggle",
+        "Fixed Size Mode",
+        this.fixedSizeEnabled,
+        (value) => {
+          this.fixedSizeEnabled = value;
+          this.setWidgetValue("fixed_size_enabled", value);
+          this.updateFixedSizeWidgets();
+          this.applyFixedSizeToCurrentCrop();
+          this.commitState();
+        }
+      );
+
+      this.fixedSizePresetWidget = this.addWidget(
+        "combo",
+        "Size Preset",
+        this.fixedSizePreset || "Custom",
+        (value) => {
+          this.fixedSizePreset = value;
+          this.setWidgetValue("fixed_size_preset", value);
+          this.updateFixedSizeFromPreset();
+          this.updateFixedSizeWidgets(); // Update widget disabled states
+          this.applyFixedSizeToCurrentCrop();
+          this.commitState();
+        },
+        {
+          values: ["Custom", "720x1280", "1280x720", "1024x1024", "512x512", "768x768", "1024x768", "768x1024", "1920x1080", "1080x1920", "1280x960", "960x1280", "640x480", "480x640"]
+        }
+      );
+      
+      // Ensure the hidden widget also has the correct value
+      const hidden_preset_widget = this.getWidget("fixed_size_preset");
+      if (hidden_preset_widget && (!hidden_preset_widget.value || hidden_preset_widget.value === "None")) {
+        hidden_preset_widget.value = "Custom";
+      }
+
+      this.fixedWidthWidget = this.addWidget(
+        "number",
+        "Fixed Width",
+        this.fixedWidth,
+        (value) => {
+          this.fixedWidth = Math.max(1, Math.min(8192, Math.round(value)));
+          this.setWidgetValue("fixed_width", this.fixedWidth);
+          this.fixedSizePreset = "Custom";
+          this.fixedSizePresetWidget.value = "Custom";
+          this.setWidgetValue("fixed_size_preset", "Custom");
+          this.applyFixedSizeToCurrentCrop();
+          this.commitState();
+        },
+        { min: 1, max: 8192, step: 1 }
+      );
+
+      this.fixedHeightWidget = this.addWidget(
+        "number",
+        "Fixed Height",
+        this.fixedHeight,
+        (value) => {
+          this.fixedHeight = Math.max(1, Math.min(8192, Math.round(value)));
+          this.setWidgetValue("fixed_height", this.fixedHeight);
+          this.fixedSizePreset = "Custom";
+          this.fixedSizePresetWidget.value = "Custom";
+          this.setWidgetValue("fixed_size_preset", "Custom");
+          this.applyFixedSizeToCurrentCrop();
+          this.commitState();
+        },
+        { min: 1, max: 8192, step: 1 }
+      );
+
+      // Set initial disabled state for fixed size widgets
+      this.fixedSizePresetWidget.disabled = !this.fixedSizeEnabled;
+      this.fixedWidthWidget.disabled = !this.fixedSizeEnabled || this.fixedSizePreset !== "Custom";
+      this.fixedHeightWidget.disabled = !this.fixedSizeEnabled || this.fixedSizePreset !== "Custom";
 
       const aspectRatioWidget = this.addWidget(
         "string",
@@ -361,6 +487,9 @@ app.registerExtension({
 
       this.size = this.computeSize();
 
+      // Initialize fixed size widgets visibility
+      this.updateFixedSizeWidgets();
+
       this.resetCrop();
       this.commitState();
       this.setDirtyCanvas(true);
@@ -374,6 +503,200 @@ app.registerExtension({
       if (this.infoToggle) {
         this.infoToggle.name = this.getInfoToggleLabel();
       }
+    };
+
+    nodeType.prototype.getWidgetsHeight = function () {
+      if (!this.widgets || this.widgets.length === 0) return 0;
+
+      // Get the last widget's actual position and height
+      const lastWidget = this.widgets[this.widgets.length - 1];
+      
+      // If the last widget has a y position set, use it
+      if (lastWidget.y !== undefined) {
+        // Get the widget's height
+        let widgetHeight = 0;
+        const nodeWidth = this.size ? this.size[0] : 400;
+        
+        if (lastWidget.computedHeight) {
+          widgetHeight = lastWidget.computedHeight;
+        } else if (lastWidget.computeSize) {
+          widgetHeight = lastWidget.computeSize(nodeWidth)[1];
+        } else {
+          widgetHeight = LiteGraph.NODE_WIDGET_HEIGHT || 20;
+        }
+        
+        // Return the bottom position of the last widget relative to the widget area start
+        // The widget.y is relative to the node, so we need to subtract the header height
+        return (lastWidget.y + widgetHeight) - 30; // 30 is header height
+      }
+      
+      // Fallback: calculate based on widget count if positions aren't set
+      let totalHeight = 0;
+      const nodeWidth = this.size ? this.size[0] : 400;
+      const widgetSpacing = 4;
+
+      for (let i = 0; i < this.widgets.length; i++) {
+        const widget = this.widgets[i];
+        
+        if (widget.computedHeight) {
+          totalHeight += widget.computedHeight;
+        } else if (widget.computeSize) {
+          totalHeight += widget.computeSize(nodeWidth)[1];
+        } else {
+          totalHeight += LiteGraph.NODE_WIDGET_HEIGHT || 20;
+        }
+        
+        if (i < this.widgets.length - 1) {
+          totalHeight += widgetSpacing;
+        }
+      }
+
+      return totalHeight + 10;
+    };
+
+    nodeType.prototype.updateFixedSizeWidgets = function () {
+      if (this.fixedSizePresetWidget) {
+        this.fixedSizePresetWidget.disabled = !this.fixedSizeEnabled;
+      }
+      if (this.fixedWidthWidget) {
+        // Disable if fixed mode is off OR if a preset is selected (not Custom)
+        this.fixedWidthWidget.disabled = !this.fixedSizeEnabled || this.fixedSizePreset !== "Custom";
+      }
+      if (this.fixedHeightWidget) {
+        // Disable if fixed mode is off OR if a preset is selected (not Custom)
+        this.fixedHeightWidget.disabled = !this.fixedSizeEnabled || this.fixedSizePreset !== "Custom";
+      }
+      // No need to recompute size since widgets are still visible
+      this.setDirtyCanvas(true);
+    };
+
+    nodeType.prototype.updateFixedSizeFromPreset = function () {
+      if (this.fixedSizePreset !== "Custom") {
+        const parts = this.fixedSizePreset.split("x");
+        if (parts.length === 2) {
+          this.fixedWidth = parseInt(parts[0]);
+          this.fixedHeight = parseInt(parts[1]);
+          if (this.fixedWidthWidget) this.fixedWidthWidget.value = this.fixedWidth;
+          if (this.fixedHeightWidget) this.fixedHeightWidget.value = this.fixedHeight;
+          this.setWidgetValue("fixed_width", this.fixedWidth);
+          this.setWidgetValue("fixed_height", this.fixedHeight);
+        }
+      }
+    };
+
+    nodeType.prototype.applyFixedSizeToCurrentCrop = function () {
+      if (!this.fixedSizeEnabled) return;
+
+      // Don't apply if no image loaded or invalid dimensions
+      if (!this.actualImageWidth || !this.actualImageHeight ||
+          this.actualImageWidth <= 0 || this.actualImageHeight <= 0) {
+        return;
+      }
+
+      const preview = this.getPreviewArea();
+      if (!preview.width || !preview.height) return;
+
+      // Get the current crop center point, or use image center if no crop exists
+      let centerX, centerY;
+      if (this.dragStart && this.dragEnd) {
+        centerX = (this.dragStart[0] + this.dragEnd[0]) / 2;
+        centerY = (this.dragStart[1] + this.dragEnd[1]) / 2;
+      } else {
+        centerX = preview.width / 2;
+        centerY = preview.height / 2;
+      }
+
+      // Calculate the preview dimensions for the fixed size
+      const scaleX = this.actualImageWidth / preview.width;
+      const scaleY = this.actualImageHeight / preview.height;
+      const previewFixedWidth = this.fixedWidth / scaleX;
+      const previewFixedHeight = this.fixedHeight / scaleY;
+
+      // Calculate new crop rectangle, centered on the current center (or image center)
+      let newLeft = centerX - previewFixedWidth / 2;
+      let newTop = centerY - previewFixedHeight / 2;
+      let newRight = newLeft + previewFixedWidth;
+      let newBottom = newTop + previewFixedHeight;
+
+      // Constrain to image boundaries
+      if (newLeft < 0) {
+        newRight -= newLeft;
+        newLeft = 0;
+      }
+      if (newTop < 0) {
+        newBottom -= newTop;
+        newTop = 0;
+      }
+      if (newRight > preview.width) {
+        newLeft -= (newRight - preview.width);
+        newRight = preview.width;
+      }
+      if (newBottom > preview.height) {
+        newTop -= (newBottom - preview.height);
+        newBottom = preview.height;
+      }
+
+      // Final bounds check - ensure we don't go negative
+      newLeft = Math.max(0, newLeft);
+      newTop = Math.max(0, newTop);
+      newRight = Math.min(preview.width, newLeft + previewFixedWidth);
+      newBottom = Math.min(preview.height, newTop + previewFixedHeight);
+
+      // Set the new crop rectangle
+      this.dragStart = [newLeft, newTop];
+      this.dragEnd = [newRight, newBottom];
+
+      // Update crop values and redraw
+      this.updateCropValuesFromBox();
+      this.setDirtyCanvas(true);
+    };
+
+    nodeType.prototype.createFixedSizeCropAtPosition = function (clickPos, preview) {
+      if (!this.fixedSizeEnabled) return;
+
+      const scaleX = this.actualImageWidth / preview.width;
+      const scaleY = this.actualImageHeight / preview.height;
+      const previewFixedWidth = this.fixedWidth / scaleX;
+      const previewFixedHeight = this.fixedHeight / scaleY;
+
+      // Center the crop on the click position
+      let newLeft = clickPos.x - previewFixedWidth / 2;
+      let newTop = clickPos.y - previewFixedHeight / 2;
+      let newRight = newLeft + previewFixedWidth;
+      let newBottom = newTop + previewFixedHeight;
+
+      // Constrain to image boundaries
+      if (newLeft < 0) {
+        newRight -= newLeft;
+        newLeft = 0;
+      }
+      if (newTop < 0) {
+        newBottom -= newTop;
+        newTop = 0;
+      }
+      if (newRight > preview.width) {
+        newLeft -= (newRight - preview.width);
+        newRight = preview.width;
+      }
+      if (newBottom > preview.height) {
+        newTop -= (newBottom - preview.height);
+        newBottom = preview.height;
+      }
+
+      // Final bounds check - ensure we don't go negative
+      newLeft = Math.max(0, newLeft);
+      newTop = Math.max(0, newTop);
+      newRight = Math.min(preview.width, newLeft + previewFixedWidth);
+      newBottom = Math.min(preview.height, newTop + previewFixedHeight);
+
+      // Set the new crop rectangle
+      this.dragStart = [newLeft, newTop];
+      this.dragEnd = [newRight, newBottom];
+
+      // Update crop values and redraw
+      this.updateCropValuesFromBox();
+      this.commitState();
+      this.setDirtyCanvas(true);
     };
 
     nodeType.prototype.forceUpdate = function () {
@@ -431,18 +754,49 @@ app.registerExtension({
 
       this.infoDisplayEnabled = this.properties.infoDisplayEnabled ?? true;
 
+      this.fixedSizeEnabled = this.properties.fixedSizeEnabled ?? false;
+      this.fixedSizePreset = this.properties.fixedSizePreset || "Custom";
+      // Ensure it's never None
+      if (this.fixedSizePreset === "None" || this.fixedSizePreset === null || this.fixedSizePreset === undefined) {
+        this.fixedSizePreset = "Custom";
+      }
+      this.fixedWidth = this.properties.fixedWidth ?? DEFAULT_SIZE;
+      this.fixedHeight = this.properties.fixedHeight ?? DEFAULT_SIZE;
+      
+      // Also update the widget directly
+      const presetWidget = this.getWidget("fixed_size_preset");
+      if (presetWidget) {
+        presetWidget.value = this.fixedSizePreset;
+      }
+
       this.box_color = this.properties.box_color;
 
       this.forceUpdate();
 
       this.syncCropWidgetsFromProperties();
       this.updateInfoToggleLabel();
+      this.updateFixedSizeWidgets();
+
+      // Apply fixed size if enabled when loading from configuration
+      if (this.fixedSizeEnabled) {
+        this.applyFixedSizeToCurrentCrop();
+      }
 
       this.commitState();
+
+      // Check for connected LoadImage node after configuration
+      setTimeout(() => {
+        this.tryLoadImageFromConnectedNode();
+      }, 100);
     };
 
     nodeType.prototype.onAdded = function () {
       const node = this;
+
+      // Check if there's already a connected LoadImage node
+      setTimeout(() => {
+        this.tryLoadImageFromConnectedNode();
+      }, 100);
 
       const originalOnMouseDown = node.onMouseDown;
       const originalOnMouseMove = node.onMouseMove;
@@ -500,6 +854,10 @@ app.registerExtension({
       safeAssign(this.properties, "crop_width", this.cropData_width);
       safeAssign(this.properties, "crop_height", this.cropData_height);
       safeAssign(this.properties, "snapValue", this.snapValue);
+      safeAssign(this.properties, "fixedSizeEnabled", this.fixedSizeEnabled);
+      safeAssign(this.properties, "fixedSizePreset", this.fixedSizePreset);
+      safeAssign(this.properties, "fixedWidth", this.fixedWidth);
+      safeAssign(this.properties, "fixedHeight", this.fixedHeight);
 
       this.setWidgetValue("crop_left", this.cropData_left);
       this.setWidgetValue("crop_right", this.cropData_right);
@@ -507,8 +865,23 @@ app.registerExtension({
       this.setWidgetValue("crop_bottom", this.cropData_bottom);
       this.setWidgetValue("crop_width", this.cropData_width);
       this.setWidgetValue("crop_height", this.cropData_height);
+      this.setWidgetValue("fixed_size_enabled", this.fixedSizeEnabled);
+      this.setWidgetValue("fixed_size_preset", this.fixedSizePreset);
+      this.setWidgetValue("fixed_width", this.fixedWidth);
+      this.setWidgetValue("fixed_height", this.fixedHeight);
     };
 
+    // Ensure widget values are valid before execution
+    nodeType.prototype.onExecute = function () {
+      // Make sure fixed_size_preset has a valid value
+      const presetWidget = this.getWidget("fixed_size_preset");
+      if (presetWidget) {
+        if (!presetWidget.value || presetWidget.value === "None" || presetWidget.value === "null" || presetWidget.value === null) {
+          presetWidget.value = "Custom";
+        }
+      }
+    };
+    
     nodeType.prototype.onExecuted = function (message) {
       const backendCropData = message?.crop_info?.[0] || null;
       const backendShouldResetCrop = backendCropData?.reset_crop_ui || false;
@@ -558,7 +931,45 @@ app.registerExtension({
             this.cropData_top = backendCropData.top;
             this.cropData_bottom = backendCropData.bottom;
 
+            // Update fixed size info from backend if available
+            if (backendCropData.fixed_size_enabled !== undefined) {
+              this.fixedSizeEnabled = backendCropData.fixed_size_enabled;
+              this.setWidgetValue("fixed_size_enabled", this.fixedSizeEnabled);
+              if (this.fixedSizeToggleWidget) {
+                this.fixedSizeToggleWidget.value = this.fixedSizeEnabled;
+              }
+            }
+
+            if (backendCropData.fixed_size_preset !== undefined) {
+              this.fixedSizePreset = backendCropData.fixed_size_preset;
+              this.setWidgetValue("fixed_size_preset", this.fixedSizePreset);
+              if (this.fixedSizePresetWidget) {
+                this.fixedSizePresetWidget.value = this.fixedSizePreset;
+              }
+            }
+
+            if (backendCropData.fixed_width !== undefined) {
+              this.fixedWidth = backendCropData.fixed_width;
+              this.setWidgetValue("fixed_width", this.fixedWidth);
+              if (this.fixedWidthWidget) {
+                this.fixedWidthWidget.value = this.fixedWidth;
+              }
+            }
+
+            if (backendCropData.fixed_height !== undefined) {
+              this.fixedHeight = backendCropData.fixed_height;
+              this.setWidgetValue("fixed_height", this.fixedHeight);
+              if (this.fixedHeightWidget) {
+                this.fixedHeightWidget.value = this.fixedHeight;
+              }
+            }
+
             this.syncCropWidgetsFromProperties();
+            this.updateFixedSizeWidgets();
+            // Apply fixed size if enabled
+            if (this.fixedSizeEnabled) {
+              this.applyFixedSizeToCurrentCrop();
+            }
           }
           this.actualImageWidth = newWidth;
           this.actualImageHeight = newHeight;
@@ -589,6 +1000,117 @@ app.registerExtension({
     ) {
       if (type === LiteGraph.INPUT && link_info?.type === "IMAGE") {
         this.setDirtyCanvas(true);
+
+        // Try to get image from connected LoadImage node
+        if (connected) {
+          // Reset callback setup tracker when connection changes
+          this._loadImageCallbackSetup = null;
+          this.tryLoadImageFromConnectedNode();
+        } else {
+          // Clear the callback setup when disconnected
+          this._loadImageCallbackSetup = null;
+          this.lastLoadedImageSource = null;
+        }
+      }
+    };
+
+    nodeType.prototype.tryLoadImageFromConnectedNode = function() {
+      // Get the connected node
+      if (!this.inputs || !this.inputs[0] || !this.graph) return;
+
+      const link = this.graph.links[this.inputs[0].link];
+      if (!link) return;
+
+      const sourceNode = this.graph.getNodeById(link.origin_id);
+      if (!sourceNode) return;
+
+      // Check if it's a LoadImage node
+      if (sourceNode.type === "LoadImage" || sourceNode.type === "LoadImageOutput") {
+        // Get the image filename from the node's widgets
+        const imageWidget = sourceNode.widgets?.find(w => w.name === "image");
+        if (!imageWidget || !imageWidget.value) return;
+
+        // Load the image directly without executing the graph
+        const imagePath = imageWidget.value;
+
+        // Determine the folder based on node type
+        const folder = sourceNode.type === "LoadImageOutput" ? "output" : "input";
+
+        // Create the image URL
+        const imageUrl = app.api.apiURL(
+          `/view?filename=${encodeURIComponent(imagePath)}&type=${folder}&subfolder=&rand=${Date.now()}`
+        );
+
+        // Track the source to avoid reloading same image
+        const imageSource = `${folder}/${imagePath}`;
+        if (this.lastLoadedImageSource === imageSource && this.imageLoaded) {
+          return; // Skip if already loaded this image
+        }
+        this.lastLoadedImageSource = imageSource;
+
+        // Load the image
+        this.image.onload = () => {
+          this.imageLoaded = true;
+          const newWidth = this.image.naturalWidth;
+          const newHeight = this.image.naturalHeight;
+
+          this.actualImageWidth = newWidth;
+          this.actualImageHeight = newHeight;
+
+          // Reset crop to full image
+          this.resetCrop(newWidth, newHeight);
+
+          // Compute and apply new size
+          const newSize = this.computeSize();
+          this.size = newSize;
+
+          // Force the node to resize itself
+          if (this.graph) {
+            this.graph.setDirtyCanvas(true, false);
+          }
+
+          // Invalidate preview area cache to force recalculation
+          this._previewAreaCache = null;
+
+          this.updateBoxFromCropValues();
+
+          // Apply fixed size if enabled
+          if (this.fixedSizeEnabled) {
+            this.applyFixedSizeToCurrentCrop();
+          }
+
+          this.commitState();
+          this.setDirtyCanvas(true);
+        };
+
+        this.image.onerror = () => {
+          this.imageLoaded = false;
+          console.warn("[DragCrop] Failed to load image from connected node");
+        };
+
+        this.image.src = imageUrl;
+
+        // Set up a watcher for changes to the LoadImage widget
+        // Store the callback reference on this node, not the LoadImage widget
+        if (!this._loadImageCallbackSetup || this._loadImageCallbackSetup !== sourceNode.id) {
+          const originalCallback = imageWidget.callback;
+          const dragCropNode = this; // Capture reference to the dragcrop node
+
+          // Wrap the original callback
+          imageWidget.callback = function(value) {
+            // Call original callback if it exists
+            if (originalCallback && typeof originalCallback === 'function') {
+              originalCallback.call(this, value);
+            }
+            // Reload image when LoadImage selection changes
+            if (dragCropNode && dragCropNode.graph) {
+              setTimeout(() => dragCropNode.tryLoadImageFromConnectedNode(), 100);
+            }
+          };
+
+          // Mark that we've set up the callback for this specific source node
+          this._loadImageCallbackSetup = sourceNode.id;
+        }
       }
     };
 
@@ -600,33 +1122,48 @@ app.registerExtension({
       const minPreviewWidth = 400;
       const minPreviewHeight = 400;
       const maxPreviewWidth = 1024;
+      const maxPreviewHeight = 800;
 
       const aspectRatio = this.actualImageWidth / this.actualImageHeight;
       let previewWidth, previewHeight;
 
+      // Calculate preview size maintaining aspect ratio
       if (aspectRatio > 1) {
-        previewWidth = Math.min(minPreviewWidth, this.actualImageWidth);
+        // Landscape image
+        previewWidth = minPreviewWidth;
         previewHeight = previewWidth / aspectRatio;
+
+        // Check if height exceeds max
+        if (previewHeight > maxPreviewHeight) {
+          previewHeight = maxPreviewHeight;
+          previewWidth = previewHeight * aspectRatio;
+        }
       } else {
-        previewHeight = Math.min(minPreviewHeight, this.actualImageHeight);
-        previewWidth = previewHeight * aspectRatio;
+        // Portrait or square image - start with width and calculate height
+        previewWidth = minPreviewWidth;
+        previewHeight = previewWidth / aspectRatio;
+
+        // Check if height exceeds max
+        if (previewHeight > maxPreviewHeight) {
+          previewHeight = maxPreviewHeight;
+          previewWidth = previewHeight * aspectRatio;
+        }
       }
 
       previewWidth = Math.max(200, previewWidth);
       previewHeight = Math.max(200, previewHeight);
 
-      const baseWidth = Math.min(previewWidth + 40, maxPreviewWidth);
-      const headerHeight = 30;
-      const paddingY = 40;
-      const widgetHeight =
-        (this.widgets?.filter((w) => !w.hidden) || []).length * 25;
-      const instructionHeight = 40;
-      let totalHeight =
-        headerHeight +
-        previewHeight +
-        paddingY +
-        widgetHeight +
-        instructionHeight;
+      // Use same padding values as getPreviewArea()
+      const padding = 20;
+      const baseWidth = Math.min(previewWidth + (padding * 2), maxPreviewWidth + 40);
+      const headerHeight = 30; // Standard node header height
+      const widgetHeight = this.getWidgetsHeight();
+      
+      // Match the offsets used in getPreviewArea()
+      const topOffset = headerHeight + widgetHeight + 25; // 25px padding after widgets
+      const bottomOffset = 50 + 30 + 10; // infoTextHeight(50) + instructionHeight(30) + padding(10)
+
+      let totalHeight = topOffset + previewHeight + bottomOffset;
 
       this._computedAspectRatio = baseWidth / totalHeight;
       this._computedWidth = baseWidth;
@@ -642,7 +1179,8 @@ app.registerExtension({
 
       const [newWidth, newHeight] = size;
 
-      const paddingX = 40;
+      const padding = 20;
+      const paddingX = padding * 2; // 20px on each side
       const previewWidth = newWidth - paddingX;
 
       const minPreviewWidth = 200;
@@ -659,17 +1197,13 @@ app.registerExtension({
       const newPreviewHeight = clampedPreviewWidth / aspectRatio;
 
       const headerHeight = 30;
-      const paddingY = 40;
-      const instructionHeight = 40;
-      const widgetHeight =
-        (this.widgets?.filter((w) => !w.hidden) || []).length * 25;
+      const widgetHeight = this.getWidgetsHeight();
+      
+      // Use same offsets as computeSize() and getPreviewArea()
+      const topOffset = headerHeight + widgetHeight + 25; // 25px padding after widgets
+      const bottomOffset = 50 + 30 + 10; // infoTextHeight(50) + instructionHeight(30) + padding(10)
 
-      const totalHeight =
-        headerHeight +
-        newPreviewHeight +
-        paddingY +
-        widgetHeight +
-        instructionHeight;
+      const totalHeight = topOffset + newPreviewHeight + bottomOffset;
 
       this.size = [clampedPreviewWidth + paddingX, totalHeight];
 
@@ -687,6 +1221,11 @@ app.registerExtension({
 
       const hit = this.getCropBoxHitArea(local);
       if (hit) {
+        // In fixed size mode, only allow moving
+        if (this.fixedSizeEnabled && hit !== "move") {
+          return false; // Don't allow resizing operations
+        }
+
         this.dragging = true;
         this.dragMode = hit;
         this.dragStartPos = mousePos;
@@ -713,6 +1252,12 @@ app.registerExtension({
         local.x < preview.width &&
         local.y < preview.height
       ) {
+        // In fixed size mode, create a new crop with fixed dimensions at the click position
+        if (this.fixedSizeEnabled) {
+          this.createFixedSizeCropAtPosition(local, preview);
+          return true;
+        }
+
         this.dragging = true;
         this.dragMode = "new";
         this.newCropStart = [local.x, local.y];
@@ -1222,6 +1767,10 @@ app.registerExtension({
       mousePosLocal.y = clampedY;
 
       if (this.dragMode === "new") {
+        // For fixed size mode, don't allow new drags - the size is fixed
+        if (this.fixedSizeEnabled) {
+          return true; // Consume the event but don't change anything
+        }
         this.handleNewDrag(
           mousePosLocal,
           preview,
@@ -1240,6 +1789,18 @@ app.registerExtension({
             MIN_HEIGHT
           );
         }
+      } else if (this.fixedSizeEnabled) {
+        // In fixed size mode, only allow moving, not resizing
+        if (this.dragMode === "move") {
+          this.handleEdgeOrMoveDrag(
+            mousePosLocal,
+            preview,
+            MIN_WIDTH,
+            MIN_HEIGHT
+          );
+        }
+        // Ignore resize operations in fixed size mode
+        return true;
       } else if (lockedAspectRatio) {
         this.handleAspectRatioDrag(
           mousePosLocal,
@@ -1362,7 +1923,8 @@ app.registerExtension({
     };
 
     nodeType.prototype.getPreviewArea = function () {
-      const cacheKey = `${this.size?.[0]}x${this.size?.[1]}_${this.actualImageWidth}x${this.actualImageHeight}`;
+      const widgetHeight = this.getWidgetsHeight();
+      const cacheKey = `${this.size?.[0]}x${this.size?.[1]}_${this.actualImageWidth}x${this.actualImageHeight}_wh${widgetHeight}`;
 
       if (this._previewAreaCache && this._previewAreaCache.key === cacheKey) {
         return this._previewAreaCache.value;
@@ -1377,9 +1939,31 @@ app.registerExtension({
       }
 
       const padding = 20;
-      const headerHeight = 80;
+      const headerHeight = 30; // Standard node header height
+      // widgetHeight already calculated above for cache key
+      const infoTextHeight = 50; // Space for the 3 lines of info text
+      const instructionHeight = 30; // Space for instruction text at bottom
+
+      // Calculate available space for preview
+      const topOffset = headerHeight + widgetHeight + 25; // 25px padding after widgets
+      const bottomOffset = infoTextHeight + instructionHeight + 10; // Space needed at bottom
+
       const maxPreviewWidth = this.size[0] - padding * 2;
-      const maxPreviewHeight = this.size[1] - headerHeight - 50;
+      const maxPreviewHeight = this.size[1] - topOffset - bottomOffset;
+
+      // Ensure minimum preview size
+      if (maxPreviewHeight < 100) {
+        // Node is too small, use minimum
+        const area = {
+          x: padding,
+          y: topOffset,
+          width: Math.max(100, maxPreviewWidth),
+          height: 100,
+        };
+        this._previewAreaCache = { key: cacheKey, value: area };
+        return area;
+      }
+
       const aspectRatio = this.actualImageWidth / this.actualImageHeight;
       let previewWidth, previewHeight;
 
@@ -1392,10 +1976,7 @@ app.registerExtension({
       }
 
       const xOffset = (this.size[0] - previewWidth) / 2 - padding;
-
-      const widgetHeight =
-        (this.widgets?.filter((w) => !w.hidden) || []).length * 25;
-      const yOffset = headerHeight + widgetHeight;
+      const yOffset = topOffset;
 
       const area = {
         x: padding + xOffset,
@@ -1486,6 +2067,11 @@ app.registerExtension({
             w.value = 0;
           }
         });
+      }
+
+      // Apply fixed size if enabled after reset
+      if (this.fixedSizeEnabled) {
+        this.applyFixedSizeToCurrentCrop();
       }
     };
 
@@ -1697,6 +2283,28 @@ app.registerExtension({
       const cropW = Math.abs(x1 - x2);
       const cropH = Math.abs(y1 - y2);
 
+      // In fixed size mode, only allow moving via center circle
+      if (this.fixedSizeEnabled) {
+        const centerX = cropX + cropW / 2;
+        const centerY = cropY + cropH / 2;
+        const handleRadius = Math.max(6, HANDLE_SIZE + 2) / 2;
+        const distToCenter = Math.sqrt(
+          Math.pow(localX - centerX, 2) + Math.pow(localY - centerY, 2)
+        );
+
+        if (distToCenter <= handleRadius) {
+          return "move";
+        }
+
+        // Also allow clicking anywhere in the crop area to move in fixed size mode
+        if (localX >= cropX && localX <= cropX + cropW &&
+            localY >= cropY && localY <= cropY + cropH) {
+          return "move";
+        }
+
+        return null;
+      }
+
       const minEdgeSize = 2;
       const maxEdgeSize = 6;
       const edgeSize = Math.max(
@@ -1865,40 +2473,58 @@ app.registerExtension({
         );
       }
 
-      const handleSize = Math.max(4, HANDLE_SIZE);
-      const half = handleSize / 2;
-      const handlePositions = [
-        [clippedX, clippedY],
-        [clippedX + clippedW, clippedY],
-        [clippedX, clippedY + clippedH],
-        [clippedX + clippedW, clippedY + clippedH],
-      ];
+      // Only show resize handles if not in fixed size mode
+      if (!this.fixedSizeEnabled) {
+        const handleSize = Math.max(4, HANDLE_SIZE);
+        const half = handleSize / 2;
+        const handlePositions = [
+          [clippedX, clippedY],
+          [clippedX + clippedW, clippedY],
+          [clippedX, clippedY + clippedH],
+          [clippedX + clippedW, clippedY + clippedH],
+        ];
 
-      ctx.fillStyle = ColorUtils.darken(this.box_color, 80);
-      ctx.strokeStyle = this.box_color;
-      ctx.lineWidth = 1;
+        ctx.fillStyle = ColorUtils.darken(this.box_color, 80);
+        ctx.strokeStyle = this.box_color;
+        ctx.lineWidth = 1;
 
-      handlePositions.forEach(([hx, hy]) => {
+        handlePositions.forEach(([hx, hy]) => {
+          ctx.beginPath();
+          ctx.rect(hx - half, hy - half, handleSize, handleSize);
+          ctx.fill();
+          ctx.stroke();
+        });
+
+        const edgePositions = [
+          [clippedX + clippedW / 2, clippedY],
+          [clippedX + clippedW / 2, clippedY + clippedH],
+          [clippedX, clippedY + clippedH / 2],
+          [clippedX + clippedW, clippedY + clippedH / 2],
+        ];
+
+        ctx.fillStyle = ColorUtils.darken(this.box_color, 80);
+        edgePositions.forEach(([hx, hy]) => {
+          ctx.beginPath();
+          ctx.rect(hx - half, hy - half, handleSize, handleSize);
+          ctx.fill();
+          ctx.stroke();
+        });
+      } else {
+        // In fixed size mode, show a center handle for moving
+        const handleSize = Math.max(6, HANDLE_SIZE + 2);
+        const half = handleSize / 2;
+        const centerX = clippedX + clippedW / 2;
+        const centerY = clippedY + clippedH / 2;
+
+        ctx.fillStyle = ColorUtils.darken(this.box_color, 80);
+        ctx.strokeStyle = this.box_color;
+        ctx.lineWidth = 2;
+
         ctx.beginPath();
-        ctx.rect(hx - half, hy - half, handleSize, handleSize);
+        ctx.arc(centerX, centerY, half, 0, 2 * Math.PI);
         ctx.fill();
         ctx.stroke();
-      });
-
-      const edgePositions = [
-        [clippedX + clippedW / 2, clippedY],
-        [clippedX + clippedW / 2, clippedY + clippedH],
-        [clippedX, clippedY + clippedH / 2],
-        [clippedX + clippedW, clippedY + clippedH / 2],
-      ];
-
-      ctx.fillStyle = ColorUtils.darken(this.box_color, 80);
-      edgePositions.forEach(([hx, hy]) => {
-        ctx.beginPath();
-        ctx.rect(hx - half, hy - half, handleSize, handleSize);
-        ctx.fill();
-        ctx.stroke();
-      });
+      }
 
       ctx.restore();
     };
@@ -1973,50 +2599,65 @@ app.registerExtension({
       if (this.image.src && this.image.complete) {
         aspectRatio = MathUtils.decimalToRatio(decimalAspectRatio);
       }
-      ctx.fillText(
-        `Source: ${this.actualImageWidth}×${
-          this.actualImageHeight
-        } AR: ${decimalAspectRatio.toFixed(2)}:1 (${aspectRatio})`,
-        20,
-        362
-      );
+      // Position text below the preview image with proper bounds checking
+      const textStartY = previewArea.y + previewArea.height + 20; // Start text 20px below image
 
-      ctx.fillStyle = "#777";
-      ctx.font = "10px Arial";
-      ctx.textAlign = "left";
+      // Make sure text doesn't overlap with instruction text at bottom
+      const maxTextY = this.size[1] - 40; // Leave 40px for instruction text
 
-      this.updateCropDisplayValues({ round: true });
-      if (this.cropDisplayValues) {
-        const decimalAspectRatioCropped =
-          this.cropDisplayValues.width / this.cropDisplayValues.height || 1;
-        let aspectRatioCropped = "";
-        if (this.image.src && this.image.complete) {
-          aspectRatioCropped = MathUtils.decimalToRatio(
-            decimalAspectRatioCropped
+      if (textStartY < maxTextY) {
+        ctx.fillText(
+          `Source: ${this.actualImageWidth}×${
+            this.actualImageHeight
+          } AR: ${decimalAspectRatio.toFixed(2)}:1 (${aspectRatio})`,
+          20,
+          textStartY
+        );
+
+        ctx.fillStyle = "#777";
+        ctx.font = "10px Arial";
+        ctx.textAlign = "left";
+
+        this.updateCropDisplayValues({ round: true });
+        if (this.cropDisplayValues && textStartY + 13 < maxTextY) {
+          const decimalAspectRatioCropped =
+            this.cropDisplayValues.width / this.cropDisplayValues.height || 1;
+          let aspectRatioCropped = "";
+          if (this.image.src && this.image.complete) {
+            aspectRatioCropped = MathUtils.decimalToRatio(
+              decimalAspectRatioCropped
+            );
+          }
+          ctx.fillText(
+            `Crop: L: ${this.cropDisplayValues.left} R: ${this.cropDisplayValues.right} T: ${this.cropDisplayValues.top} B: ${this.cropDisplayValues.bottom}`,
+            20,
+            textStartY + 13  // 13px line spacing
           );
-        }
-        ctx.fillText(
-          `Crop: L: ${this.cropDisplayValues.left} R: ${this.cropDisplayValues.right} T: ${this.cropDisplayValues.top} B: ${this.cropDisplayValues.bottom}`,
-          20,
-          349
-        );
 
-        ctx.fillText(
-          `Target: ${this.cropDisplayValues.width}×${
-            this.cropDisplayValues.height
-          } AR: ${decimalAspectRatioCropped.toFixed(
-            2
-          )}:1 (${aspectRatioCropped})`,
-          20,
-          373
-        );
+          if (textStartY + 26 < maxTextY) {
+            ctx.fillText(
+              `Target: ${this.cropDisplayValues.width}×${
+                this.cropDisplayValues.height
+              } AR: ${decimalAspectRatioCropped.toFixed(
+                2
+              )}:1 (${aspectRatioCropped})`,
+              20,
+              textStartY + 26  // 13px line spacing
+            );
+          }
+        }
       }
 
       ctx.fillStyle = "#aaaaaa";
       ctx.font = "10px Arial";
       ctx.textAlign = "center";
+      let instructionText = "Drag in the preview to select a crop area.";
+      if (this.fixedSizeEnabled) {
+        instructionText = `Fixed size mode: ${this.fixedWidth}x${this.fixedHeight} (${this.fixedSizePreset})`;
+      }
+
       ctx.fillText(
-        "Drag in the preview to select a crop area.",
+        instructionText,
         this.size[0] / 2,
         this.size[1] - 10
       );
