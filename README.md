@@ -7,7 +7,7 @@ An interactive image cropping node for ComfyUI, allowing precise visual selectio
 - **Author:** Olli Sorjonen
 - **GitHub:** https://github.com/o-l-l-i
 - **X:** https://x.com/Olmirad
-- **Version:** 1.0.1.1 (Chain original mouse event handlers to maintain subgraph header button functionality in ComfyUI frontend 1.24.4 and later.)
+- **Version:** 1.1 (Refactor/rewrite code for maintainability.)
 
 ---
 
@@ -106,6 +106,7 @@ Back up your projects frequently. Feedback, bug reports, and suggestions are alw
 
 ## Version History
 
+- **1.1** Refactor/rewrite the code for maintainability and more modular structure. Various small improvements.
 - **1.0.1.1**
   - Chain original mouse event handlers to maintain subgraph header button functionality in ComfyUI frontend 1.24.4 and later.
   - Fix mask pass-through issue (None type crash.)
